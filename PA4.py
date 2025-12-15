@@ -56,16 +56,15 @@ def FIFO_victim(pte, pid, vpn):
 
     old_pid = frames[oldest_frame]['pid']
     old_vpn = frames[oldest_frame]['vpn']
-
-    page_table[old_pid][old_vpn] = {
-        'valid': False,
-        'frame': None,
-        'dirty': False
-    }
+    old_pte = page_table[old_pid][old_vpn]
+    
+    old_pte["valid"] = False
+    old_pte["frame"] = None
 
     if frames[oldest_frame]["dirty"]:
         stats["disk_accesses"] += 1
         stats["dirty_writes"] += 1
+        old_pte["dirty"] = False
 
     pte['valid'] = True
     pte['frame'] = oldest_frame
@@ -126,7 +125,8 @@ def algorithm_loop(algorithm):
             access = parts[2]
             #print(f"PID: {pid}")
             #print(f"VPN: {vpn}")
-            
+           
+            '''
             free_frame = None
             for i in range(NUM_FRAMES):
                 if frames[i] is None:
@@ -142,7 +142,7 @@ def algorithm_loop(algorithm):
                     stats["page_faults"] += 1
                     stats["disk_accesses"] += 1
                     continue
-
+            '''
             #if the given process isn't in the page table, add it to the page table
             if pid not in page_table:
                 page_table[pid] = {}
@@ -166,6 +166,8 @@ def algorithm_loop(algorithm):
                 frame_id = pte["frame"]
                 frames[frame_id]["ref"] = True
                 frames[frame_id]["last_used"] = access_time
+                if access == "W":
+                    frames[frame_id]["dirty"] = True
             else:
                 #It's not in the page table
                 stats["page_faults"] += 1
