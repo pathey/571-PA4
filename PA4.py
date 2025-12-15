@@ -11,6 +11,9 @@ input_file = sys.argv[1]
 random_seed = sys.argv[2]
 #algorithm = sys.argv[2]
 
+#define random seed
+random.seed(random_seed)
+
 #in this experiment there are 32 frames in physical memory
 NUM_FRAMES = 32
 
@@ -50,7 +53,40 @@ def reset_state(num_frames=NUM_FRAMES):
 
 
 def RAND_victim(pte, pid, vpn):
-    pass
+    global stats, frames, access_time, page_table
+    #generate a random location between 0 - 31 on physical main memory
+    victim_page_RAND = random.randint(0, NUM_FRAMES - 1) 
+
+    #locate pid, vpn to determine which page table the main memory (MM) entry belongs to
+    old_pid = frames[victim_page_RAND]['pid']
+    old_vpn = frames[victim_page_RAND]['vpn']
+
+    #set entry to not valid - there is not a translation in MM
+    page_table[old_pid][old_vpn] = {
+        'valid': False,
+        'frame': None,
+        'dirty': False
+    }
+
+    #if physical memory victim has a dirty bit increment dirty writes and disk accesses
+    if frames[victim_page_RAND]["dirty"]:
+        stats["disk_accesses"] += 1
+        stats["dirty_writes"] += 1
+    
+    #set entry to valid - there is a translation to MM and assign frame index
+    pte['valid'] = True
+    pte['frame'] = victim_page_RAND
+
+    #update MM to new entry
+    frames[victim_page_RAND] = {
+        "pid":pid,
+        "vpn":vpn,
+        "ref": True,
+        "dirty":pte['dirty'],
+        "load_time": access_time,
+        "last_used": access_time
+    }
+    
 
 def FIFO_victim(pte, pid, vpn):
     oldest_frame = 0
