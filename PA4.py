@@ -5,6 +5,12 @@ import math
 import time
 import random
 
+alg_list = ['RAND', 'FIFO', 'LRU', 'PER', 'oracle']
+
+input_file = sys.argv[1]
+random_seed = sys.argv[2]
+#algorithm = sys.argv[2]
+
 #in this experiment there are 32 frames in physical memory
 NUM_FRAMES = 32
 
@@ -99,12 +105,6 @@ victim_dispatch = {
 }
 
 victim_func = None
-
-
-alg_list = ['RAND', 'FIFO', 'LRU', 'PER', 'oracle']
-
-input_file = sys.argv[1]
-#algorithm = sys.argv[2]
 
 
 #This loop iterates through the selected file. It is given an algorithm and then processes each memory access one at a time.
