@@ -121,7 +121,8 @@ def algorithm_loop(algorithm):
 
             parts = line.split()
             pid = int(parts[0])
-            vpn = int(parts[1])
+            addr = int(parts[1])
+            vpn = addr >> 9
             access = parts[2]
             #print(f"PID: {pid}")
             #print(f"VPN: {vpn}")
@@ -155,22 +156,40 @@ def algorithm_loop(algorithm):
                 }
                     
             pte = page_table[pid].get(vpn)
+
+            pte["ref"] = True
             if access == 'W':
                 pte['dirty'] = True
+
             if pte is not None and pte["valid"]:
                 #It's in the page table and is in physical memory currently
                 frame_id = pte["frame"]
-                frame = frames[frame_id]
-                frame["ref"] = True
-                frame["last_used"] = access_time
+                frames[frame_id]["ref"] = True
+                frames[frame_id]["last_used"] = access_time
             else:
-                #It's not in the page table, and there was no free frame (determined earlier)
+                #It's not in the page table
                 stats["page_faults"] += 1
                 stats["disk_accesses"] += 1
-                victim_func(pte, pid, vpn)
+
+                free_frame = next((i for i in range(NUM_FRAMES) if frames[i] is None), None)
+
+                if free_frame is not None:
+                    # load into free frame
+                    pte["valid"] = True
+                    pte["frame"] = free_frame
+                    frames[free_frame] = {
+                        "pid": pid,
+                        "vpn": vpn,
+                        "ref": True,
+                        "dirty": (access == "W"),
+                        "load_time": access_time,
+                        "last_used": access_time,
+                    }
+                else:
+                    victim_func(pte, pid, vpn)
 
 
-            access_time+= 1
+            access_time += 1
 
 #This loop calls the above function once per algorithm, then resets the frame etc.
 for i in alg_list:
