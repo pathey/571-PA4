@@ -3,6 +3,7 @@ from typing import Dict, List
 import sys
 import math
 import time
+import random
 
 #in this experiment there are 32 frames in physical memory
 NUM_FRAMES = 32
@@ -25,6 +26,8 @@ stats = None
 
 #initalize a global variable to track the first free frame (just optimizes the initial loading)
 free_frame = None
+access_time = 0
+
 
 #define table of all page mappings
 page_table = {}
@@ -40,19 +43,27 @@ def reset_state(num_frames=NUM_FRAMES):
     frames = [None] * num_frames
 
 
-def RAND_victim():
+def RAND_victim(pte):
     pass
 
-def FIFO_victim():
+def FIFO_victim(pte):
+    oldest_frame = 0
+    for i in NUM_FRAMES:
+        if frames[i]["load_time"] < frames[oldest_frame]["load_time"]:
+            oldest_frame = i
+    if frames[oldest_frame]["dirty"]:
+        stats["disk_accesses"] += 1
+        stats["dirty_writes"] += 1
+    
+    
+
+def LRU_victim(pte):
     pass
 
-def LRU_victim():
+def PER_victim(pte):
     pass
 
-def PER_victim():
-    pass
-
-def oracle_victim():
+def oracle_victim(pte):
     pass
 
 victim_dispatch = {
@@ -70,7 +81,7 @@ alg_list = ['RAND', 'FIFO', 'LRU', 'PER', 'oracle']
 
 input_file = sys.argv[1]
 #algorithm = sys.argv[2]
-
+[
 
 #This loop iterates through the selected file. It is given an algorithm and then processes each memory access one at a time.
 def algorithm_loop(algorithm):
@@ -127,7 +138,7 @@ def algorithm_loop(algorithm):
                 #It's not in the page table, and there was no free frame (determined earlier)
                 stats["page_faults"] += 1
                 stats["disk_accesses"] += 1
-                victim_func()
+                victim_func(pte)
 
 
             access_time+= 1
