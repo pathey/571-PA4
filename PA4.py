@@ -43,27 +43,51 @@ def reset_state(num_frames=NUM_FRAMES):
     frames = [None] * num_frames
 
 
-def RAND_victim(pte):
+def RAND_victim(pte, pid, vpn):
     pass
 
-def FIFO_victim(pte):
+def FIFO_victim(pte, pid, vpn):
     oldest_frame = 0
-    for i in NUM_FRAMES:
+    global stats, frames, access_time, page_table
+    #print(frames)
+    for i in range(NUM_FRAMES):
         if frames[i]["load_time"] < frames[oldest_frame]["load_time"]:
             oldest_frame = i
+
+    old_pid = frames[oldest_frame]['pid']
+    old_vpn = frames[oldest_frame]['vpn']
+
+    page_table[old_pid][old_vpn] = {
+        'valid': False,
+        'frame': None,
+        'dirty': False
+    }
+
     if frames[oldest_frame]["dirty"]:
         stats["disk_accesses"] += 1
         stats["dirty_writes"] += 1
-    
-    
 
-def LRU_victim(pte):
+    pte['valid'] = True
+    pte['frame'] = oldest_frame
+
+    frames[oldest_frame] = {
+        "pid":pid,
+        "vpn":vpn,
+        "ref": True,
+        "dirty":pte['dirty'],
+        "load_time": access_time,
+        "last_used": access_time
+
+    }
+
+
+def LRU_victim(pte, pid, vpn):
     pass
 
-def PER_victim(pte):
+def PER_victim(pte, pid, vpn):
     pass
 
-def oracle_victim(pte):
+def oracle_victim(pte, pid, vpn):
     pass
 
 victim_dispatch = {
@@ -81,11 +105,12 @@ alg_list = ['RAND', 'FIFO', 'LRU', 'PER', 'oracle']
 
 input_file = sys.argv[1]
 #algorithm = sys.argv[2]
-[
+
 
 #This loop iterates through the selected file. It is given an algorithm and then processes each memory access one at a time.
 def algorithm_loop(algorithm):
     print(f"Running: {algorithm}")
+    global stats, victim_func, frames, access_time
     access_time = 0
     victim_func = victim_dispatch[algorithm]
     stats = stats_dispatch[algorithm]
@@ -98,6 +123,8 @@ def algorithm_loop(algorithm):
             pid = int(parts[0])
             vpn = int(parts[1])
             access = parts[2]
+            #print(f"PID: {pid}")
+            #print(f"VPN: {vpn}")
             
             free_frame = None
             for i in range(NUM_FRAMES):
@@ -113,6 +140,7 @@ def algorithm_loop(algorithm):
                     }
                     stats["page_faults"] += 1
                     stats["disk_accesses"] += 1
+                    continue
 
             #if the given process isn't in the page table, add it to the page table
             if pid not in page_table:
@@ -127,7 +155,8 @@ def algorithm_loop(algorithm):
                 }
                     
             pte = page_table[pid].get(vpn)
-            
+            if access == 'W':
+                pte['dirty'] = True
             if pte is not None and pte["valid"]:
                 #It's in the page table and is in physical memory currently
                 frame_id = pte["frame"]
@@ -138,7 +167,7 @@ def algorithm_loop(algorithm):
                 #It's not in the page table, and there was no free frame (determined earlier)
                 stats["page_faults"] += 1
                 stats["disk_accesses"] += 1
-                victim_func(pte)
+                victim_func(pte, pid, vpn)
 
 
             access_time+= 1
@@ -147,3 +176,4 @@ def algorithm_loop(algorithm):
 for i in alg_list:
     algorithm_loop(i)
     reset_state()
+    print(stats_dispatch[i])
