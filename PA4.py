@@ -58,7 +58,7 @@ def RAND_victim(pte, pid, vpn):
     #generate a random location between 0 - 31 on physical main memory
     victim_page_RAND = random.randint(0, NUM_FRAMES - 1) 
 
-    #locate pid, vpn to determine which page table the main memory (MM) entry belongs to
+    #locate pid, vpn to determine which page table the original main memory (MM) entry belongs to
     old_pid = frames[victim_page_RAND]['pid']
     old_vpn = frames[victim_page_RAND]['vpn']
     old_pte = page_table[old_pid][old_vpn]
@@ -123,7 +123,42 @@ def FIFO_victim(pte, pid, vpn):
 
 
 def LRU_victim(pte, pid, vpn):
-    pass
+    global stats, frames, access_time, page_table
+
+    #Locate Least Recently Used index on MM
+    victim_page_LRU = 0
+    for i in range(NUM_FRAMES):
+         if frames[i]["last_used"] < frames[victim_page_LRU]["last_used"]:
+             victim_page_LRU = i
+
+    #locate pid, vpn to determine which page table the original main memory (MM) entry belongs to
+    old_pid = frames[victim_page_LRU]['pid']
+    old_vpn = frames[victim_page_LRU]['vpn']
+    old_pte = page_table[old_pid][old_vpn]
+
+    #set entry to not valid - there is not a translation in MM
+    old_pte["valid"] = False
+    old_pte["frame"] = None
+
+    #if physical memory victim has a dirty bit increment dirty writes and disk accesses
+    if frames[victim_page_LRU]["dirty"]:
+        stats["disk_accesses"] += 1
+        stats["dirty_writes"] += 1
+        old_pte["dirty"] = False
+    
+    #set entry to valid - there is a translation to MM and assign frame index
+    pte['valid'] = True
+    pte['frame'] = victim_page_LRU
+
+    #update MM to new entry
+    frames[victim_page_LRU] = {
+        "pid":pid,
+        "vpn":vpn,
+        "ref": True,
+        "dirty":pte['dirty'],
+        "load_time": access_time,
+        "last_used": access_time
+    }
 
 def PER_victim(pte, pid, vpn):
     pass
