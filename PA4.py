@@ -27,6 +27,7 @@ stats = None
 #initalize a global variable to track the first free frame (just optimizes the initial loading)
 free_frame = None
 access_time = 0
+access_quantity = 0
 
 
 #define table of all page mappings
@@ -84,7 +85,47 @@ def LRU_victim(pte, pid, vpn):
     pass
 
 def PER_victim(pte, pid, vpn):
-    pass
+    global stats, frames, access_time, page_table
+    #of note is that the first requirement of PER doesn't require specific implementation here because it happens by default in the main loop as we assumed it would always need to happen regardless of algorithm
+    victim_frame = None
+    categories = [(0,0), (0,1), (1,0), (1,1)]
+    for r, d in categories:
+        for i in range(NUM_FRAMES):
+            fr = frames[i]
+            if fr is None:
+                continue
+            if int(fr["ref"]) == r and int(fr["dirty"]) == d:
+                victim_frame = i
+                break
+        if victim_frame is not None:
+            break
+
+    old_pid = frames[victim_frame]['pid']
+    old_vpn = frames[victim_frame]['vpn']
+    old_pte = page_table[old_pid][old_vpn]
+    
+    old_pte["valid"] = False
+    old_pte["frame"] = None
+
+    if frames[victim_frame]["dirty"]:
+        stats["disk_accesses"] += 1
+        stats["dirty_writes"] += 1
+        old_pte["dirty"] = False
+
+    pte['valid'] = True
+    pte['frame'] = victim_frame
+
+    frames[victim_frame] = {
+        "pid":pid,
+        "vpn":vpn,
+        "ref": 1,
+        "dirty":pte['dirty'],
+        "load_time": access_time,
+        "last_used": access_time
+
+    }
+
+
 
 def oracle_victim(pte, pid, vpn):
     pass
@@ -111,6 +152,7 @@ def algorithm_loop(algorithm):
     print(f"Running: {algorithm}")
     global stats, victim_func, frames, access_time
     access_time = 0
+    #access_quantity = 0
     victim_func = victim_dispatch[algorithm]
     stats = stats_dispatch[algorithm]
     with open(input_file, "r") as f:
@@ -143,6 +185,12 @@ def algorithm_loop(algorithm):
                     stats["disk_accesses"] += 1
                     continue
             '''
+
+            if algorithm == "PER" and access_time % 200 == 0 and access_time > 0:
+                for i in range(NUM_FRAMES):
+                    if frames[i] is not None:
+                        frames[i]["ref"] = 0
+
             #if the given process isn't in the page table, add it to the page table
             if pid not in page_table:
                 page_table[pid] = {}
@@ -157,14 +205,14 @@ def algorithm_loop(algorithm):
                     
             pte = page_table[pid].get(vpn)
 
-            pte["ref"] = True
+            pte["ref"] = 1
             if access == 'W':
                 pte['dirty'] = True
 
             if pte is not None and pte["valid"]:
                 #It's in the page table and is in physical memory currently
                 frame_id = pte["frame"]
-                frames[frame_id]["ref"] = True
+                frames[frame_id]["ref"] = 1
                 frames[frame_id]["last_used"] = access_time
                 if access == "W":
                     frames[frame_id]["dirty"] = True
@@ -182,13 +230,14 @@ def algorithm_loop(algorithm):
                     frames[free_frame] = {
                         "pid": pid,
                         "vpn": vpn,
-                        "ref": True,
+                        "ref": 1,
                         "dirty": (access == "W"),
                         "load_time": access_time,
                         "last_used": access_time,
                     }
                 else:
                     victim_func(pte, pid, vpn)
+                    #access_quantity += 1
 
 
             access_time += 1
