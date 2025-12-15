@@ -38,6 +38,9 @@ pid = None
 vpn = None
 access = None
 
+input_file = sys.argv[1]
+#algorithm = sys.argv[2]
+
 def reset_state(num_frames=NUM_FRAMES):
     global page_table, frames
     page_table = {}
@@ -99,7 +102,7 @@ def PER_victim(pte, pid, vpn):
                 break
         if victim_frame is not None:
             break
-
+    #basically recycled from FIFO
     old_pid = frames[victim_frame]['pid']
     old_vpn = frames[victim_frame]['vpn']
     old_pte = page_table[old_pid][old_vpn]
@@ -128,7 +131,91 @@ def PER_victim(pte, pid, vpn):
 
 
 def oracle_victim(pte, pid, vpn):
-    pass
+    global stats, frames, access_time, page_table
+    #of note is that the first requirement of PER doesn't require specific implementation here because it happens by default in the main loop as we assumed it would always need to happen regardless of algorithm
+       # collect resident pages (frame_id -> (pid, vpn))
+    resident = {}
+    for i in range(NUM_FRAMES):
+        fr = frames[i]
+        if fr is None:
+            continue
+        resident[i] = (fr["pid"], fr["vpn"])
+
+    if not resident:
+        raise RuntimeError("oracle_victim called but no resident frames found")
+
+    # initialize next-use distances to infinity
+    # next_use[frame_id] = next time index this resident page appears again
+    next_use = {frame_id: math.inf for frame_id in resident.keys()}
+
+    # for fast checks while scanning:
+    # page_to_frames[(pid,vpn)] = [frame_id,...] (usually 1, but safe)
+    page_to_frames = {}
+    for frame_id, key in resident.items():
+        page_to_frames.setdefault(key, []).append(frame_id)
+
+    remaining = set(resident.keys())
+
+    # scan forward from the current access_time + 1
+    idx = -1  # access index over non-empty lines
+    with open(input_file, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            idx += 1
+
+            # skip past current access
+            if idx <= access_time:
+                continue
+
+            parts = line.split()
+            future_pid = int(parts[0])
+            addr = int(parts[1])
+            future_vpn = addr >> 9
+
+            key = (future_pid, future_vpn)
+            if key in page_to_frames:
+                # this resident page appears again at idx
+                for frame_id in page_to_frames[key]:
+                    if frame_id in remaining:
+                        next_use[frame_id] = idx
+                        remaining.remove(frame_id)
+
+                # if we've found next-use for every resident page, stop early
+                if not remaining:
+                    break
+
+    #choose victim: farthest next use (inf means never used again => best victim)
+    victim_frame = max(next_use, key=lambda fid: next_use[fid]) 
+    
+
+    #basically recycled from FIFO
+    old_pid = frames[victim_frame]['pid']
+    old_vpn = frames[victim_frame]['vpn']
+    old_pte = page_table[old_pid][old_vpn]
+    
+    old_pte["valid"] = False
+    old_pte["frame"] = None
+
+    if frames[victim_frame]["dirty"]:
+        stats["disk_accesses"] += 1
+        stats["dirty_writes"] += 1
+        old_pte["dirty"] = False
+
+    pte['valid'] = True
+    pte['frame'] = victim_frame
+
+    frames[victim_frame] = {
+        "pid":pid,
+        "vpn":vpn,
+        "ref": 1,
+        "dirty":pte['dirty'],
+        "load_time": access_time,
+        "last_used": access_time
+
+    }
 
 victim_dispatch = {
     "RAND": RAND_victim,
@@ -143,8 +230,6 @@ victim_func = None
 
 alg_list = ['RAND', 'FIFO', 'LRU', 'PER', 'oracle']
 
-input_file = sys.argv[1]
-#algorithm = sys.argv[2]
 
 
 #This loop iterates through the selected file. It is given an algorithm and then processes each memory access one at a time.
